@@ -1,0 +1,53 @@
+The intention of this file is to document the design decisions -- the "whys"
+-- of quirclj.
+
+
+
+se.raek.quirclj.message
+
+The library utilizes three distinct message representations: raw message
+strings, raw message maps and logical message maps. The need for a distinction
+of the first two is perhaps self-explanatory: it is far more convenient for a
+Clojure program to access information stored in a map than in a string. The
+raw message map mirrors the structure of raw message string very closely. The
+intention is that there should be a fairly straightforward 1:1 mapping between
+them.
+
+nick!user@host
+
+One non-trivial issue is how client identifiers in the source part of a
+message should be represented. The source of a message can be either a client
+or a server. A server identifier only consist of the host name. A client
+identifier, though, consists of a nick name, an optional user name and an
+optional host name. Only the nick name part is needed to uniquely identify a
+client on an IRC network. On could consider the user name and host name to be
+"metadata" of the nick name.
+
+Another relevant detail is that some messages contain a target parameter,
+which can take the value of a client identifier -- but, in those cases, only
+the nick name part is allowed. This gives the impression that the nick name is
+the "real" underlying client identifier. Therefore, the :source key of a raw
+message map is associated with only the nick name part of the source, if it is
+a client identifier. This, of course, gives birth to a new question: where
+should the user name and host name "metadata" go?
+
+(It is here also assumed that the "real" identifier often is of some
+importance. This is most probably a reasonable assumption, since one of the
+most basic tasks, namely replying to a PRIVMSG, often requires the nick name
+part of the source of a message to be used as the target in a response
+message.)
+
+One way of representing the source of a message could be to use a string in
+the case of a server, and a composite data structure (a vector or a map)
+containing up to three strings for the client case. To get to the uniquely
+identifying part of the identifier, the user of the library would have to
+destructure it in some cases, and use the whole thing in other cases. Forcing
+the user of the library to clutter the code with conditionals even for basic
+tasks seems like a bad idea.
+
+Another way of representing the source would be to store the "metadata"
+outside the value for the :source key, but still in a way that suggests that
+it belongs together with it. This is the chosen approach of quirclj. Two new
+keys are introduced for the raw message map: :source-user and
+:source-host. They contain the user name and host name of the source, if
+present, or nil otherwise.
