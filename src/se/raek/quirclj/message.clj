@@ -35,11 +35,11 @@
               :source-user \"~achilles\"
               :source-host \"example.com\"
               :command \"PRIVMSG\"
-              :params (\"#quiclj\" \"Hello there!\")})
+              :params [\"#quiclj\" \"Hello there!\"]})
      => \":achilles!~achilles@example.com PRIVMSG #quirclj :Hello there!\"
   "
   {:author "Rasmus Svensson (raek)"}
-  (:refer-clojure :exlcude [format])
+  (:refer-clojure :exclude [format])
   (:use [clojure.contrib.def :only [defvar-]]))
 
 (declare parse-source parse-params)
