@@ -30,6 +30,7 @@
          :command \"PRIVMSG\"
          :params (\"#quiclj\" \"Hello there!\")}"
   {:author "Rasmus Svensson (raek)"}
+  (:refer-clojure :exlcude [format])
   (:use [clojure.contrib.def :only [defvar-]]))
 
 (declare parse-source parse-params)
@@ -61,3 +62,32 @@
 (defn- parse-params [param-str]
   (when param-str
     (re-seq param-regex param-str)))
+
+(declare format-source format-params)
+
+(defn format [msg]
+  (let [{:keys [source source-user source-host command params]} msg]
+    (str (format-source source source-user source-host)
+         command
+         (format-params params))))
+
+(defn- format-source [source source-user source-host]
+  (if source
+    (str \:
+         source
+         (if source-user
+           (str \! source-user)
+           "")
+         (if source-host
+           (str \@ source-host)
+           "")
+         \space)
+    ""))
+
+(defn- format-params [params]
+  (if (seq params)
+    (->> (concat (butlast params)
+                 [(str \: (last params))])
+         (interpose \space)
+         (apply str \space))
+    ""))
