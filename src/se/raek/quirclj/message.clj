@@ -23,12 +23,21 @@
    :params       parameters as a sequence of strings or nil if none
 
    Examples:
+
      (parse \":achilles!~achilles@example.com PRIVMSG #quirclj :Hello there!\")
      => {:source \"achilles\"
          :source-user \"~achilles\"
          :source-host \"example.com\"
          :command \"PRIVMSG\"
-         :params (\"#quiclj\" \"Hello there!\")}"
+         :params (\"#quiclj\" \"Hello there!\")}
+
+     (format {:source \"achilles\"
+              :source-user \"~achilles\"
+              :source-host \"example.com\"
+              :command \"PRIVMSG\"
+              :params (\"#quiclj\" \"Hello there!\")})
+     => \":achilles!~achilles@example.com PRIVMSG #quirclj :Hello there!\"
+  "
   {:author "Rasmus Svensson (raek)"}
   (:refer-clojure :exlcude [format])
   (:use [clojure.contrib.def :only [defvar-]]))
