@@ -47,7 +47,9 @@
 (defvar- message-regex
   #"^(?::([^ ]+) +)?([^ ]+)(?: +(.+))?$")
 
-(defn parse [s]
+(defn parse
+  "Parses an IRC message in in the form of a string into a map."
+  [s]
   (when-let [[_ source-str command param-str] (re-find message-regex s)]
     (let [source-map (parse-source source-str)
           params (parse-params param-str)]
@@ -74,7 +76,9 @@
 
 (declare format-source format-params)
 
-(defn format [msg]
+(defn format
+  "Formats an IRC message in the form of a map into a string."
+  [msg]
   (let [{:keys [source source-user source-host command params]} msg]
     (str (format-source source source-user source-host)
          command
