@@ -7,100 +7,118 @@
 
    An IRC message has the following anatomy:
 
-   - an optional source (called \"prefix\" in the RFC),
-   - a command,
+   - an optional sender (called \"prefix\" in the RFC),
+   - a message type (called \"command\" in the RFC),
    - and zero or more parameters, of which the last one can contain spaces.
 
-   The source can also have optional user name and host name information
-   attached to it.
+   The sender is either a nickname or a server hostname. If it is a nickname,
+   it may also have optional login and hostname information attached to it.
 
-   The map form of a message has the following keys:
+   A message line is parsed into a message vector, which has the following
+   structure:
 
-   :source       source as a string (without user name and user host) or nil
-   :source-user  user name of the source as a string or nil
-   :source-host  host name of the source as a string or nil
-   :command      as-is command name as string
-   :params       parameters as a sequence of strings or nil if none
+   `[[~sender ~login ~hostname] ~type [~@params]]
+
+   where the places at the unquoted symbols have the the meanings
+
+   sender    the sender, without the login and hostname
+   login     the login of the sender
+   hostname  the hostname of the sender
+   type      the message type (the \"command\")
+   params    the message parameters
 
    Examples:
 
-     (parse \":achilles!~achilles@example.com PRIVMSG #quirclj :Hello there!\")
-     => {:source \"achilles\"
-         :source-user \"~achilles\"
-         :source-host \"example.com\"
-         :command \"PRIVMSG\"
-         :params (\"#quiclj\" \"Hello there!\")}
+     (line->message \":achilles!ach123@example.com PRIVMSG #quirclj :Hello there!\")
+     => [[\"achilles\" \"ach123\" \"example.com\"]
+         \"PRIVMSG\"
+         [\"#quiclj\" \"Hello there!\"]]
 
-     (format {:source \"achilles\"
-              :source-user \"~achilles\"
-              :source-host \"example.com\"
-              :command \"PRIVMSG\"
-              :params [\"#quiclj\" \"Hello there!\"]})
-     => \":achilles!~achilles@example.com PRIVMSG #quirclj :Hello there!\"
-  "
-  {:author "Rasmus Svensson (raek)"}
-  (:refer-clojure :exclude [format])
-  (:use [clojure.contrib.def :only [defvar-]]))
+     (message->line [[\"achilles\" \"ach123\" \"example.com\"]
+                     \"PRIVMSG\"
+                     [\"#quiclj\" \"Hello there!\"]])
+     => \":achilles!ach123@example.com PRIVMSG #quirclj :Hello there!\"
+  ")
 
-(declare parse-source parse-params)
+(declare parse-sender parse-params)
 
-(defvar- message-regex
-  #"^(?::([^ ]+) +)?([^ ]+)(?: +(.+))?$")
+(def #^{:private true} message-regex
+  #"^(?::([^\u0000\u000a\u000d ]+) +)?([^\u0000\u000a\u000d :][^\u0000\u000a\u000d ]+)(?: +([^\u0000\u000a\u000d]+))?$")
 
-(defn parse
-  "Parses an IRC message in in the form of a string into a map."
+(defn line->message
+  "Parses an IRC message line into a message vector. Returns nil if the line
+  is not a valid IRC message."
   [s]
-  (when-let [[_ source-str command param-str] (re-find message-regex s)]
-    (let [source-map (parse-source source-str)
+  (when-let [[_ sender-str type param-str] (re-find message-regex s)]
+    (let [sender (parse-sender sender-str)
           params (parse-params param-str)]
-      (assoc source-map
-        :command command
-        :params params))))
+      (when (and sender params)
+        [sender type params]))))
 
-(defvar- source-regex
+(def #^{:private true} sender-regex
   #"^([^!@]*)(?:!([^@]*))?(?:@(.*))?$")
 
-(defn- parse-source [source-str]
-  (let [[_ source user host]
-        (and source-str (re-find source-regex source-str))]
-       {:source source
-        :source-user user
-        :source-host host}))
+(defn- parse-sender [sender-str]
+  (if sender-str
+    (when-let [[_ sender login hostname] (re-find sender-regex sender-str)]
+      [sender login hostname])
+    [nil nil nil]))
 
-(defvar- param-regex
+(def #^{:private true} param-regex
   #"(?:(?<!:)[^ :][^ ]*|(?<=:).*)")
 
 (defn- parse-params [param-str]
-  (when param-str
-    (re-seq param-regex param-str)))
+  (vec (when param-str
+         (re-seq param-regex param-str))))
 
-(declare format-source format-params)
+(declare format-sender maybe-prefixed format-params)
 
-(defn format
-  "Formats an IRC message in the form of a map into a string."
+(def #^{:private true} illegal-line-char?
+  #{\u0000 \newline \return})
+
+(def #^{:private true} illegal-word-char?
+  #{\u0000 \newline \return \space})
+
+(def #^{:private true} illegal-prefix-word-char?
+  #{\u0000 \newline \return \space \! \@})
+
+(defn message->line
+  "Formats an IRC message vector into a string. Returns nil if the message is
+  invalid."
   [msg]
-  (let [{:keys [source source-user source-host command params]} msg]
-    (str (format-source source source-user source-host)
-         command
-         (format-params params))))
+  (let [[[sender login hostname] type params] msg
+        sender-str (format-sender sender login hostname)
+        param-str (format-params params)]
+    (when (and (not-any? illegal-word-char? type)
+               sender-str type type param-str)
+      (str sender-str type param-str))))
 
-(defn- format-source [source source-user source-host]
-  (if source
-    (str \:
-         source
-         (if source-user
-           (str \! source-user)
-           "")
-         (if source-host
-           (str \@ source-host)
-           "")
-         \space)
+(defn- format-sender [sender login hostname]
+  (when (and (not-any? illegal-prefix-word-char? sender)
+             (not-any? illegal-prefix-word-char? login)
+             (not-any? illegal-prefix-word-char? hostname)
+             (or sender (not (or login hostname))))
+    (if-not sender
+      ""
+      (str \: sender
+           (maybe-prefixed \! login)
+           (maybe-prefixed \@ hostname)
+           \space))))
+
+(defn- maybe-prefixed [prefix s]
+  (if s
+    (str prefix s)
     ""))
 
 (defn- format-params [params]
-  (if (seq params)
-    (->> (concat (butlast params)
-                 [(str \: (last params))])
-         (interpose \space)
-         (apply str \space))
-    ""))
+  (if (empty? params)
+    ""
+    (let [word-params (butlast params)
+          rest-param (last params)]
+      (when (and (every? #(not-any? illegal-word-char? %) word-params)
+                 (every? seq word-params)
+                 (not-any? illegal-line-char? rest-param))
+        (->> (concat word-params
+                     (list (str \: rest-param)))
+             (interpose \space)
+             (apply str \space))))))

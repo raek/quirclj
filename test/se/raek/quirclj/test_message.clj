@@ -1,193 +1,150 @@
 (ns se.raek.quirclj.test-message
   {:author "Rasmus Svensson (raek)"}
   (:use clojure.test)
-  (:require [se.raek.quirclj.message :as msg]))
+  (:use [se.raek.quirclj.message :only (line->message message->line)]))
 
 (defn in? [x coll]
   (contains? coll x))
 
-(deftest raw-message-string-and-map
-  
-  (testing "parsing command only"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse "FOO")]
-      (is (nil? source))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "FOO"))
-      (is (nil? params))))
+(deftest test-line->message
 
-  (testing "formatting command only"
-    (is (= (msg/format {:command "FOO"})
-           "FOO")))
-  
-  (testing "parsing prefix and command"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse ":tortoise BAR")]
-      (is (= source "tortoise"))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "BAR"))
-      (is (nil? params))))
+  (testing "command only"
+    (is (= (line->message "COMMAND")
+           [[nil nil nil] "COMMAND" []])))
 
-  (testing "formatting prefix and command"
-    (is (= (msg/format {:source "tortoise"
-                        :command "BAR"})
-           ":tortoise BAR")))
-  
-  (testing "parsing single parameter"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse "BAZ param")]
-      (is (nil? source))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "BAZ"))
-      (is (= params ["param"]))))
+  (testing "nick prefix"
+    (is (= (line->message ":nick COMMAND")
+           [["nick" nil nil] "COMMAND" []])))
 
-  (testing "formatting single parameter"
-    (is (in? (msg/format {:command "BAZ"
-                          :params ["param"]})
-             #{"BAZ param"
-               "BAZ :param"})))
-  
-  (testing "parsing prefix, command and single parameter"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse ":achilles QUUX param")]
-      (is (= source "achilles"))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "QUUX"))
-      (is (= params ["param"]))))
+  (testing "nick and login prefix"
+    (is (= (line->message ":nick!login COMMAND")
+           [["nick" "login" nil] "COMMAND" []])))
 
-  (testing "formatting prefix, command and single parameter"
-    (is (in? (msg/format {:source "achilles"
-                          :command "QUUX"
-                          :params ["param"]})
-             #{":achilles QUUX param"
-               ":achilles QUUX :param"})))
-  
-  (testing "parsing three parameters"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse "COMMAND one two three")]
-      (is (= source nil))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "COMMAND"))
-      (is (= params ["one" "two" "three"]))))
+  (testing "nick and hostname prefix"
+    (is (= (line->message ":nick@users.example.com COMMAND")
+           [["nick" nil "users.example.com"] "COMMAND" []])))
 
-  (testing "formatting three parameters"
-    (is (in? (msg/format {:command "COMMAND"
-                          :params ["one" "two" "three"]})
+  (testing "nick, login and hostname prefix"
+    (is (= (line->message ":nick!login@users.example.com COMMAND")
+           [["nick" "login" "users.example.com"] "COMMAND" []])))
+
+  (testing "server prefix"
+    (is (= (line->message ":server.example.com COMMAND")
+           [["server.example.com" nil nil] "COMMAND" []])))
+
+  (testing "single parameter"
+    (is (= (line->message "COMMAND param")
+           [[nil nil nil] "COMMAND" ["param"]])))
+
+  (testing "some parameters"
+    (is (= (line->message "COMMAND one two three")
+           [[nil nil nil] "COMMAND" ["one" "two" "three"]])))
+
+  (testing "some parameters and rest parameter"
+    (is (= (line->message "COMMAND one two :three")
+           [[nil nil nil] "COMMAND" ["one" "two" "three"]])))
+
+  (testing "non-empty rest parameter"
+    (is (= (line->message "COMMAND :param")
+           [[nil nil nil] "COMMAND" ["param"]])))
+
+  (testing "empty rest parameter"
+    (is (= (line->message "COMMAND :")
+           [[nil nil nil] "COMMAND" [""]])))
+
+  (testing "rest parameter with spaces"
+    (is (= (line->message "COMMAND :one two three")
+           [[nil nil nil] "COMMAND" ["one two three"]])))
+
+  (testing "complete prefix and parameters"
+    (is (= (line->message ":nick!login@users.example.com COMMAND one two :three three three")
+           [["nick" "login" "users.example.com"] "COMMAND" ["one" "two" "three three three"]])))
+
+  (testing "null in string"
+    (is (nil? (line->message "FOO\u0000BAR"))))
+
+  (testing "line feed in string"
+    (is (nil? (line->message "FOO\nBAR"))))
+
+  (testing "carriage return in string"
+    (is (nil? (line->message "FOO\rBAR"))))
+
+  (testing "no command"
+    (is (nil? (line->message ":nick")))))
+
+(deftest test-message->line
+
+  (testing "command only"
+    (is (= (message->line [[nil nil nil] "COMMAND" []])
+           "COMMAND")))
+
+  (testing "nick prefix"
+    (is (= (message->line [["nick" nil nil] "COMMAND" []])
+           ":nick COMMAND")))
+
+  (testing "nick and login prefix"
+    (is (= (message->line [["nick" "login" nil] "COMMAND" []])
+           ":nick!login COMMAND")))
+
+  (testing "nick and hostname prefix"
+    (is (= (message->line [["nick" nil "users.example.com"] "COMMAND" []])
+           ":nick@users.example.com COMMAND")))
+
+  (testing "nick, login and hostname prefix"
+    (is (= (message->line [["nick" "login" "users.example.com"] "COMMAND" []])
+           ":nick!login@users.example.com COMMAND")))
+
+  (testing "server prefix"
+    (is (= (message->line [["server.example.com" nil nil] "COMMAND" []])
+           ":server.example.com COMMAND")))
+
+  (testing "single parameter"
+    (is (in? (message->line [[nil nil nil] "COMMAND" ["param"]])
+             #{"COMMAND param"
+               "COMMAND :param"})))
+
+  (testing "some parameters"
+    (is (in? (message->line [[nil nil nil] "COMMAND" ["one" "two" "three"]])
              #{"COMMAND one two three"
                "COMMAND one two :three"})))
-  
-  (testing "parsing rest parameter"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse "COMMAND :rest")]
-      (is (nil? source))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "COMMAND"))
-      (is (= params ["rest"]))))
-  
-  (testing "parsing empty rest parameter"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse "COMMAND :")]
-      (is (nil? source))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "COMMAND"))
-      (is (= params [""]))))
 
-  (testing "formatting emty rest parameter"
-    (is (= (msg/format {:command "COMMAND"
-                        :params [""]})
+  (testing "empty parameter"
+    (is (= (message->line [[nil nil nil] "COMMAND" [""]])
            "COMMAND :")))
-  
-  (testing "parsing rest parameter with spaces"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse "COMMAND :one two three")]
-      (is (nil? source))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "COMMAND"))
-      (is (= params ["one two three"]))))
 
-  (testing "formatting rest parameter with spaces"
-    (is (= (msg/format {:command "COMMAND"
-                        :params ["one two three"]})
-           "COMMAND :one two three")))
-  
-  (testing "parsing normal parameters and rest parameter"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse "COMMAND one two :three three three")]
-      (is (nil? source))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "COMMAND"))
-      (is (= params ["one" "two" "three three three"]))))
+  (testing "complete prefix and parameters"
+    (is (= (message->line [["nick" "login" "users.example.com"] "COMMAND" ["one" "two" "three three three"]])
+           ":nick!login@users.example.com COMMAND one two :three three three")))
 
-  (testing "formatting normal parameters and rest parameter"
-    (is (= (msg/format {:command "COMMAND"
-                        :params ["one" "two" "three three three"]})
-           "COMMAND one two :three three three")))
+  (testing "login prefix"
+    (is (nil? (message->line [[nil "login" nil] "COMMAND" []]))))
 
-  (testing "parsing client source with user name"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse ":foo!bar COMMAND")]
-      (is (= source "foo"))
-      (is (= source-user "bar"))
-      (is (nil? source-host))
-      (is (= command "COMMAND"))
-      (is (= params nil))))
-  
-  (testing "formatting client source with user name"
-    (is (= (msg/format {:source "foo"
-                        :source-user "bar"
-                        :command "COMMAND"})
-           ":foo!bar COMMAND")))
+  (testing "hostname prefix"
+    (is (nil? (message->line [[nil "login" nil] "COMMAND" []]))))
 
-  (testing "parsing client source with host name"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse ":foo@example.com COMMAND")]
-      (is (= source "foo"))
-      (is (nil? source-user))
-      (is (= source-host "example.com"))
-      (is (= command "COMMAND"))
-      (is (= params nil))))
-  
-  (testing "formatting client source with host name"
-    (is (= (msg/format {:source "foo"
-                        :source-host "example.com"
-                        :command "COMMAND"})
-           ":foo@example.com COMMAND")))
+  (testing "login and hostname prefix"
+    (is (nil? (message->line [[nil "login" "users.example.com"] "COMMAND" []]))))
 
-  (testing "parsing client source with user name and host name"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse ":foo!bar@example.com COMMAND")]
-      (is (= source "foo"))
-      (is (= source-user "bar"))
-      (is (= source-host "example.com"))
-      (is (= command "COMMAND"))
-      (is (= params nil))))
-  
-  (testing "formatting client source with user name and host name"
-    (is (= (msg/format {:source "foo"
-                        :source-user "bar"
-                        :source-host "example.com"
-                        :command "COMMAND"})
-           ":foo!bar@example.com COMMAND")))
+  (testing "empty non-last parameter"
+    (is (nil? (message->line [[nil nil nil] "COMMAND" ["" "last"]]))))
 
-  (testing "parsing server source"
-    (let [{:keys [source source-user source-host command params]}
-          (msg/parse ":irc.example.com COMMAND")]
-      (is (= source "irc.example.com"))
-      (is (nil? source-user))
-      (is (nil? source-host))
-      (is (= command "COMMAND"))
-      (is (= params nil))))
-  
-  (testing "formatting server source"
-    (is (= (msg/format {:source "irc.example.com"
-                        :command "COMMAND"})
-           ":irc.example.com COMMAND"))))
+  (testing "non-last parameter with space"
+    (is (nil? (message->line [[nil nil nil] "COMMAND" ["foo bar" "last"]]))))
+
+  (testing "illegal char in nick"
+    (is (nil? (message->line [["foo bar" nil nil] "COMMAND" []]))))
+
+  (testing "illegal char in login"
+    (is (nil? (message->line [[nil "foo bar" nil] "COMMAND" []]))))
+
+  (testing "illegal char in hostname"
+    (is (nil? (message->line [[nil nil "foo bar"] "COMMAND" []]))))
+
+  (testing "illegal char in command"
+    (is (nil? (message->line [[nil nil nil] "FOO\nBAR" []]))))
+
+  (testing "illegal char in non-last parameter"
+    (is (nil? (message->line [[nil nil nil] "COMMAND" ["foo\nbar" "last"]]))))
+
+  (testing "illegal char in last parameter"
+    (is (nil? (message->line [[nil nil nil] "COMMAND" ["first" "foo\nbar"]])))))
