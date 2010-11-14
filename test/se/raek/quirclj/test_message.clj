@@ -8,6 +8,9 @@
 
 (deftest test-line->message
 
+  (testing "nil in, nil out"
+    (is (nil? (line->message nil))))
+
   (testing "command only"
     (is (= (line->message "COMMAND")
            [[nil nil nil] "COMMAND" []])))
@@ -73,6 +76,9 @@
     (is (nil? (line->message ":nick")))))
 
 (deftest test-message->line
+
+  (testing "nil in, nil out"
+    (is (nil? (message->line nil))))
 
   (testing "command only"
     (is (= (message->line [[nil nil nil] "COMMAND" []])

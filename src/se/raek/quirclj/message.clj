@@ -49,7 +49,8 @@
   "Parses an IRC message line into a message vector. Returns nil if the line
   is not a valid IRC message."
   [s]
-  (when-let [[_ sender-str type param-str] (re-find message-regex s)]
+  (when-let [[_ sender-str type param-str]
+             (and s (re-find message-regex s))]
     (let [sender (parse-sender sender-str)
           params (parse-params param-str)]
       (when (and sender params)
